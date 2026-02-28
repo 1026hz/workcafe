@@ -1,0 +1,16 @@
+[Unit]
+Description=Workcafe FastAPI Server
+After=network.target mongod.service redis.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/workcafe
+EnvironmentFile=/home/ubuntu/workcafe/.env
+ExecStart=/home/ubuntu/workcafe/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
