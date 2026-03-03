@@ -9,3 +9,8 @@ apscheduler
 pydantic-settings
 transformers
 torch
+psutil
+langgraph
+langchain
+langchain-anthropic
+langchain-community
