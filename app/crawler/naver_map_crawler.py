@@ -1,15 +1,15 @@
 """
-네이버 지도 방문자 리뷰 수집 (httpx 기반 내부 API)
+네이버 지도 방문자 리뷰 수집
 
-Playwright 셀렉터 의존 제거 → 네이버 Maps 내부 API 직접 호출
-  1. map.naver.com/p/api/search/allSearch → place_id 추출
-  2. place.map.naver.com/place/v1/place/{id}/review/visitor → 리뷰 수집
+place_id 조회: 공식 네이버 로컬 검색 API (link 필드에 place_id 포함)
+리뷰 수집: place.map.naver.com 내부 API
 
 Before 측정: 카페 1건씩 순차 처리, 소요시간 / 메모리 기록
 """
 
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -17,23 +17,28 @@ from datetime import datetime, timezone
 import httpx
 import psutil
 
+from app.core.config import settings
 from app.core.database import get_cafes_collection, get_reviews_collection
 
 logger = logging.getLogger(__name__)
 
-NAVER_SEARCH_API = "https://map.naver.com/p/api/search/allSearch"
+NAVER_LOCAL_API = "https://openapi.naver.com/v1/search/local.json"
 NAVER_REVIEW_API = "https://place.map.naver.com/place/v1/place/{place_id}/review/visitor"
 REVIEWS_PER_CAFE = 10
 REQUEST_DELAY = 0.5
 
-HEADERS = {
+NAVER_HEADERS = {
+    "X-Naver-Client-Id": settings.naver_client_id,
+    "X-Naver-Client-Secret": settings.naver_client_secret,
+}
+
+REVIEW_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/120.0.0.0 Safari/537.36"
     ),
     "Referer": "https://map.naver.com/",
-    "Accept-Language": "ko-KR,ko;q=0.9",
 }
 
 
@@ -57,19 +62,21 @@ class NaverMapCrawler:
         self.request_delay = request_delay
 
     async def _get_place_id(self, client: httpx.AsyncClient, cafe_name: str, district: str) -> str | None:
-        query = f"{cafe_name} {district}"
+        """공식 네이버 로컬 검색 API → link URL에서 place_id 추출"""
         try:
             resp = await client.get(
-                NAVER_SEARCH_API,
-                params={"query": query, "type": "place", "lang": "ko"},
-                headers=HEADERS,
+                NAVER_LOCAL_API,
+                params={"query": f"{cafe_name} {district}", "display": 1},
+                headers=NAVER_HEADERS,
                 timeout=10.0,
             )
             resp.raise_for_status()
-            data = resp.json()
-            places = data.get("result", {}).get("place", {}).get("list", [])
-            if places:
-                return str(places[0]["id"])
+            items = resp.json().get("items", [])
+            if items:
+                # link 예시: https://map.naver.com/v5/entry/place/1234567890
+                match = re.search(r"/place/(\d+)", items[0].get("link", ""))
+                if match:
+                    return match.group(1)
         except Exception as e:
             logger.debug(f"[{cafe_name}] place_id 검색 실패: {e}")
         return None
@@ -79,7 +86,7 @@ class NaverMapCrawler:
             resp = await client.get(
                 NAVER_REVIEW_API.format(place_id=place_id),
                 params={"reviewCount": REVIEWS_PER_CAFE, "lang": "ko"},
-                headers=HEADERS,
+                headers=REVIEW_HEADERS,
                 timeout=10.0,
             )
             resp.raise_for_status()
