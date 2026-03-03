@@ -143,7 +143,7 @@ class NaverMapCrawler:
             }
             result = col.update_one(
                 {"cafe_id": doc["cafe_id"], "source_id": source_id},
-                {"$set": doc, "$setOnInsert": {"collected_at": now}},
+                {"$set": {k: v for k, v in doc.items() if k != "collected_at"}, "$setOnInsert": {"collected_at": now}},
                 upsert=True,
             )
             if result.upserted_id:

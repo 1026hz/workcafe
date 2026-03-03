@@ -102,10 +102,11 @@ class NaverBlogCrawler:
         col = get_reviews_collection()
         inserted = updated = 0
         for review in reviews:
+            set_doc = {k: v for k, v in review.items() if k != "collected_at"}
             result = col.update_one(
                 {"cafe_id": review["cafe_id"], "source_id": review["source_id"]},
                 {
-                    "$set": review,
+                    "$set": set_doc,
                     "$setOnInsert": {"collected_at": review["collected_at"]},
                 },
                 upsert=True,
