@@ -13,7 +13,6 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from urllib.parse import quote
 
 import httpx
 import psutil
@@ -58,7 +57,7 @@ class NaverMapCrawler:
         self.request_delay = request_delay
 
     async def _get_place_id(self, client: httpx.AsyncClient, cafe_name: str, district: str) -> str | None:
-        query = quote(f"{cafe_name} {district}")
+        query = f"{cafe_name} {district}"
         try:
             resp = await client.get(
                 NAVER_SEARCH_API,
